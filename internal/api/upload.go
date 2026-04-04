@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"crypto/rand"
 	"errors"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"path/filepath"
 
 	"github.com/garkashy/smart-search/internal/db"
+	"github.com/garkashy/smart-search/internal/ingestion"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -88,7 +90,7 @@ func (s *Server) UploadHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = db.InsertDocument(r.Context(), s.DB, db.Document{
+	documentID, err := db.InsertDocument(r.Context(), s.DB, db.Document{
 		UserID:   defaultUserID,
 		FileName: safeName,
 		FilePath: filePath,
@@ -100,6 +102,9 @@ func (s *Server) UploadHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to insert document", http.StatusInternalServerError)
 		return
 	}
+
+	// Process the document asynchronously
+	go ingestion.ProcessDocument(context.Background(), s.DB, documentID)
 
 	// Return the success response
 	w.WriteHeader(http.StatusOK)

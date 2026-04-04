@@ -19,13 +19,16 @@ func Migrate(ctx context.Context, db *pgxpool.Pool) error {
 	)
 	`)
 
+	if err != nil {
+		return err
+	}
+
 	_, err = db.Exec(ctx, `
 	CREATE TABLE IF NOT EXISTS chunks (
 		id SERIAL PRIMARY KEY,
 		document_id INT NOT NULL references documents(id),
 		chunk_index INT NOT NULL,
 		content TEXT NOT NULL,
-		embedding pgvector(384) NOT NULL,
 		created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 	)
 	`)

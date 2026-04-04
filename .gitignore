@@ -2,3 +2,4 @@ uploads/
 *.exe
 *.out
 .env
+*.sh
