@@ -1,0 +1,95 @@
+Got it — we’ll make a concise, high-level SFS, focusing only on the major components and flows. Perfect for passing to a coding agent so they know the direction without implementation details.
+
+⸻
+
+Smart Personal Data Search Engine – High-Level SFS
+
+⸻
+
+1. Goal
+	•	Single-user backend system to upload, store, and search personal documents.
+	•	Supports TXT, JSON, DOC files.
+	•	Search combines keyword + semantic similarity ranking.
+	•	Async ingestion pipeline for parsing, chunking, and embeddings.
+
+⸻
+
+2. Major Components
+
+Component	Responsibility
+API Layer	Expose REST endpoints: /upload, /search, /download
+Storage Layer	Store document + chunk metadata in PostgreSQL
+File Storage	Store files locally: uploads/user_1/
+Ingestion Worker	Async processing: parse, chunk, compute embeddings, update status
+ML Layer	Generate embeddings and optionally classify documents for semantic search
+Search Layer	Keyword + semantic search, ranking, merge, return results
+
+
+⸻
+
+3. Core Flows
+
+3.1 Upload Flow
+	1.	User POSTs file to /upload.
+	2.	API validates size & type.
+	3.	File saved to disk (uploads/user_1/<uuid>.<ext>).
+	4.	Insert document metadata into DB (documents table).
+	5.	Trigger ingestion worker asynchronously.
+
+⸻
+
+3.2 Ingestion Flow
+	1.	Worker reads uploaded file.
+	2.	Flatten / parse content.
+	3.	Chunk text (500–1000 words).
+	4.	Store chunks in chunks table.
+	5.	Send chunks to ML service for embeddings.
+	6.	Update document status (PROCESSING → READY).
+
+⸻
+
+3.3 Search Flow
+	1.	User sends query to /search.
+	2.	System performs:
+	•	Keyword search (DB full-text index)
+	•	Semantic search (embedding similarity)
+	3.	Merge scores + optional recency boost.
+	4.	Return top-ranked chunks/documents.
+
+⸻
+
+4. DB Tables (Major Only)
+	1.	documents – tracks each file
+	•	id, user_id, file_name, stored_path, size, status, created_at
+	2.	chunks – stores text chunks for search
+	•	id, document_id, chunk_index, content, created_at
+
+⸻
+
+5. Storage
+	•	Local filesystem (uploads/user_1/) for MVP.
+	•	UUID filenames for safety.
+	•	Optional cloud S3 later.
+
+⸻
+
+6. ML / Semantic Layer
+	•	Pretrained embeddings (e.g., sentence-transformers).
+	•	Compute embeddings per chunk.
+	•	Support cosine similarity for semantic search.
+	•	Optional document classification for better ranking.
+
+⸻
+
+7. Constraints / MVP Limits
+	•	Single user (user_1).
+	•	Max file size: 100MB.
+	•	Max total storage per user: 5GB.
+	•	Initial supported file types: TXT, JSON, DOC.
+	•	Async ingestion for semantic search (eventual consistency OK).
+
+⸻
+
+This is now short, clear, and high-level — the coding agent sees what to build and how components connect, but not how to implement every line.
+
+⸻
