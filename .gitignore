@@ -3,3 +3,5 @@ uploads/
 *.out
 .env
 *.sh
+ml-service/venv/
+ml-service/model/

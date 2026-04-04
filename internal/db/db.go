@@ -7,7 +7,13 @@ import (
 )
 
 func Migrate(ctx context.Context, db *pgxpool.Pool) error {
-	_, err := db.Exec(ctx, `
+
+	_, err := db.Exec(ctx, `CREATE EXTENSION IF NOT EXISTS vector`)
+	if err != nil {
+		return err
+	}
+
+	_, err = db.Exec(ctx, `
 	CREATE TABLE IF NOT EXISTS documents (
 		id SERIAL PRIMARY KEY,
 		user_id VARCHAR(255) NOT NULL,
@@ -29,6 +35,7 @@ func Migrate(ctx context.Context, db *pgxpool.Pool) error {
 		document_id INT NOT NULL references documents(id),
 		chunk_index INT NOT NULL,
 		content TEXT NOT NULL,
+		embedding vector(384),
 		created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 	)
 	`)
