@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"mime/multipart"
 	"net/http"
 	"os"
@@ -30,8 +31,8 @@ func generateSafeFilename(originalName string) string {
 }
 
 func validateFile(header *multipart.FileHeader) error {
-	if header.Size > 100*1024*1024 {
-		return errors.New("file size exceeds 100MB")
+	if header.Size > maxUploadSize {
+		return errors.New("file size exceeds 200MB")
 	}
 
 	// Only allow JSON and TXT
@@ -43,16 +44,17 @@ func validateFile(header *multipart.FileHeader) error {
 	return nil
 }
 
-// API to upload the files to the server
+const maxUploadSize = 200 << 20 // 200 MB
+
 func (s *Server) UploadHandler(w http.ResponseWriter, r *http.Request) {
 
-	// Only allow a POST request
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	// Retreive the file
+	r.Body = http.MaxBytesReader(w, r.Body, maxUploadSize)
+
 	uploadedFile, metadata, err := r.FormFile("file")
 	if err != nil {
 		http.Error(w, "Failed to get file", http.StatusBadRequest)
@@ -69,7 +71,11 @@ func (s *Server) UploadHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	safeName := generateSafeFilename(metadata.Filename)
-	userDir := filepath.Join("/Users/garkashy/Desktop/Test/smart-search/uploads", defaultUserID)
+	uploadBase := os.Getenv("UPLOAD_DIR")
+	if uploadBase == "" {
+		uploadBase = "./uploads"
+	}
+	userDir := filepath.Join(uploadBase, defaultUserID)
 	if err = os.MkdirAll(userDir, 0750); err != nil {
 		http.Error(w, "Failed to prepare upload directory", http.StatusInternalServerError)
 		return
@@ -104,7 +110,11 @@ func (s *Server) UploadHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Process the document asynchronously
-	go ingestion.ProcessDocument(context.Background(), s.DB, documentID)
+	go func() {
+		if err := ingestion.ProcessDocument(context.Background(), s.DB, documentID); err != nil {
+			log.Printf("[ingestion] document %d failed: %v", documentID, err)
+		}
+	}()
 
 	// Return the success response
 	w.WriteHeader(http.StatusOK)

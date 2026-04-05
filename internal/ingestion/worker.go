@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -14,30 +16,24 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func getEmbeddings(chunks []db.Chunk) ([][]float32, error) {
+const defaultChunkSize = 200
 
-	// Building a JSON body for the ML service FastAPI
+func FetchEmbeddings(texts []string) ([][]float32, error) {
+	body := map[string][]string{"texts": texts}
 
-	texts := make([]string, len(chunks))
-
-	for i, chunk := range chunks {
-		texts[i] = chunk.Content
-	}
-
-	body := map[string]interface{}{
-		"texts": texts,
-	}
-
-	// Sending the request to the ML service
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
-	resp, err := http.Post("http://localhost:8000/embed", "application/json", bytes.NewBuffer(jsonBody))
+
+	mlURL := os.Getenv("ML_SERVICE_URL")
+	if mlURL == "" {
+		mlURL = "http://localhost:8000"
+	}
+	resp, err := http.Post(mlURL+"/embed", "application/json", bytes.NewBuffer(jsonBody))
 	if err != nil {
 		return nil, err
 	}
-
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -75,19 +71,26 @@ func splitTextIntoChunks(text string, wordsPerChunk int, documentID int) []db.Ch
 	return chunks
 }
 
+func updateDocumentStatus(ctx context.Context, pool *pgxpool.Pool, documentID int) error {
+	_, err := pool.Exec(ctx, "UPDATE documents SET status = 'READY' WHERE id = $1", documentID)
+	return err
+}
+
 func ProcessDocument(ctx context.Context, pool *pgxpool.Pool, documentID int) error {
 
+	log.Printf("[ingestion] doc %d: starting", documentID)
+
 	var storedPath string
-	var docuID int
-	err := pool.QueryRow(ctx, "SELECT id, stored_path FROM documents WHERE id = $1", documentID).Scan(&docuID, &storedPath)
+	err := pool.QueryRow(ctx, "SELECT stored_path FROM documents WHERE id = $1", documentID).Scan(&storedPath)
 	if err != nil {
-		return err
+		return fmt.Errorf("fetch document row: %w", err)
 	}
 
 	content, err := os.ReadFile(storedPath)
 	if err != nil {
-		return err
+		return fmt.Errorf("read file %s: %w", storedPath, err)
 	}
+	log.Printf("[ingestion] doc %d: read %d bytes from %s", documentID, len(content), filepath.Base(storedPath))
 
 	text := string(content)
 	ext := filepath.Ext(storedPath)
@@ -96,28 +99,40 @@ func ProcessDocument(ctx context.Context, pool *pgxpool.Pool, documentID int) er
 		text = strings.ReplaceAll(text, "\n", " ")
 	}
 
-	chunks := splitTextIntoChunks(text, 500, docuID)
+	chunks := splitTextIntoChunks(text, defaultChunkSize, documentID)
+	log.Printf("[ingestion] doc %d: split into %d chunks", documentID, len(chunks))
 
 	for _, chunk := range chunks {
 		err = db.InsertChunk(ctx, pool, chunk)
 		if err != nil {
-			return err
+			return fmt.Errorf("insert chunk %d: %w", chunk.ChunkIndex, err)
 		}
 	}
+	log.Printf("[ingestion] doc %d: chunks stored in DB", documentID)
 
-	// Send the chunks to the ML service for embeddings
-	embeddings, err := getEmbeddings(chunks)
-	if err != nil {
-		return err
-	}
-
-	// Update the chunks with the embeddings
+	texts := make([]string, len(chunks))
 	for i, chunk := range chunks {
-		err = db.UpdateChunk(ctx, pool, embeddings[i], chunk.ChunkIndex, docuID)
+		texts[i] = chunk.Content
+	}
+
+	embeddings, err := FetchEmbeddings(texts)
+	if err != nil {
+		return fmt.Errorf("fetch embeddings: %w", err)
+	}
+	log.Printf("[ingestion] doc %d: received %d embeddings from ML service", documentID, len(embeddings))
+
+	for i, chunk := range chunks {
+		err = db.UpdateChunk(ctx, pool, embeddings[i], chunk.ChunkIndex, documentID)
 		if err != nil {
-			return err
+			return fmt.Errorf("update chunk %d embedding: %w", chunk.ChunkIndex, err)
 		}
 	}
 
+	err = updateDocumentStatus(ctx, pool, documentID)
+	if err != nil {
+		return fmt.Errorf("update status to READY: %w", err)
+	}
+
+	log.Printf("[ingestion] doc %d: complete", documentID)
 	return nil
 }

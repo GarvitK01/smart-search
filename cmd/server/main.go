@@ -31,7 +31,7 @@ func main() {
 	// Instanstiate the Server
 	srv := api.Server{DB: dbPool}
 	http.HandleFunc("/upload", srv.UploadHandler)
+	http.HandleFunc("/search", srv.SearchHandler)
 	log.Println("Server is running on port 8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
-
 }

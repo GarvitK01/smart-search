@@ -44,6 +44,5 @@ func Migrate(ctx context.Context, db *pgxpool.Pool) error {
 }
 
 func Connect(ctx context.Context, connString string) (*pgxpool.Pool, error) {
-
 	return pgxpool.New(ctx, connString)
 }
