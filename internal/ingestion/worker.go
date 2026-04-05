@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/garkashy/smart-search/internal/db"
+	"github.com/garkashy/smart-search/internal/parser"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -86,18 +87,11 @@ func ProcessDocument(ctx context.Context, pool *pgxpool.Pool, documentID int) er
 		return fmt.Errorf("fetch document row: %w", err)
 	}
 
-	content, err := os.ReadFile(storedPath)
+	text, err := parser.ExtractText(storedPath)
 	if err != nil {
-		return fmt.Errorf("read file %s: %w", storedPath, err)
+		return fmt.Errorf("extract text from %s: %w", filepath.Base(storedPath), err)
 	}
-	log.Printf("[ingestion] doc %d: read %d bytes from %s", documentID, len(content), filepath.Base(storedPath))
-
-	text := string(content)
-	ext := filepath.Ext(storedPath)
-
-	if ext == ".json" {
-		text = strings.ReplaceAll(text, "\n", " ")
-	}
+	log.Printf("[ingestion] doc %d: extracted %d chars from %s", documentID, len(text), filepath.Base(storedPath))
 
 	chunks := splitTextIntoChunks(text, defaultChunkSize, documentID)
 	log.Printf("[ingestion] doc %d: split into %d chunks", documentID, len(chunks))

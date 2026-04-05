@@ -37,8 +37,8 @@ func validateFile(header *multipart.FileHeader) error {
 
 	// Only allow JSON and TXT
 	ext := filepath.Ext(header.Filename)
-	if ext != ".json" && ext != ".txt" {
-		return errors.New("only JSON and TXT files are allowed")
+	if ext != ".json" && ext != ".txt" && ext != ".pdf" && ext != ".docx" {
+		return errors.New("only TXT, JSON, PDF, and DOCX files are allowed")
 	}
 
 	return nil

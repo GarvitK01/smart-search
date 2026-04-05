@@ -5,3 +5,4 @@ uploads/
 *.sh
 ml-service/venv/
 ml-service/model/
+test-commands.txt
