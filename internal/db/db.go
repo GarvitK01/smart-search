@@ -16,7 +16,7 @@ func Migrate(ctx context.Context, db *pgxpool.Pool) error {
 	_, err = db.Exec(ctx, `
 	CREATE TABLE IF NOT EXISTS documents (
 		id SERIAL PRIMARY KEY,
-		user_id VARCHAR(255) NOT NULL,
+		user_id INT NOT NULL references users(id),
 		file_name VARCHAR(255) NOT NULL,
 		stored_path VARCHAR(255) NOT NULL,
 		size BIGINT NOT NULL,
@@ -39,6 +39,37 @@ func Migrate(ctx context.Context, db *pgxpool.Pool) error {
 		created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 	)
 	`)
+	if err != nil {
+		return err
+	}
+
+	_, err = db.Exec(ctx, `
+	CREATE TABLE IF NOT EXISTS users (
+		id SERIAL PRIMARY KEY,
+		username VARCHAR(255) NOT NULL UNIQUE,
+		password VARCHAR(255) NOT NULL,
+		created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+	)
+	`)
+	if err != nil {
+		return err
+	}
+
+	_, err = db.Exec(ctx, `
+	CREATE TABLE IF NOT EXISTS sessions (
+		id SERIAL PRIMARY KEY,
+		user_id INT NOT NULL references users(id),
+		session_token VARCHAR(255) NOT NULL UNIQUE,
+		expires_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP + INTERVAL '1 day',
+		created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+	)
+	`)
+
+	if err != nil {
+		return err
+	}
+
+	_, err = db.Exec(ctx, `ALTER TABLE documents ADD COLUMN IF NOT EXISTS original_name VARCHAR(255) NOT NULL DEFAULT ''`)
 
 	return err
 }

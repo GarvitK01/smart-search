@@ -26,7 +26,11 @@ func (s *Server) SearchHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID := defaultUserID
+	userID := getUserIDFromContext(r)
+	if userID == "" {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
 
 	var (
 		keywordResults  []db.SearchResult

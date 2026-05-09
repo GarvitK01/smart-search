@@ -57,10 +57,14 @@ func splitTextIntoChunks(text string, wordsPerChunk int, documentID int) []db.Ch
 	words := strings.Fields(text)
 	var chunks []db.Chunk
 
+	const minChunkWords = 10
 	for i := 0; i < len(words); i += wordsPerChunk {
 		end := i + wordsPerChunk
 		if end > len(words) {
 			end = len(words)
+		}
+		if end-i < minChunkWords {
+			continue
 		}
 		content := strings.Join(words[i:end], " ")
 		chunks = append(chunks, db.Chunk{

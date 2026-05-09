@@ -21,7 +21,13 @@ type Server struct {
 	DB *pgxpool.Pool
 }
 
-const defaultUserID = "user_01"
+func getUserIDFromContext(r *http.Request) string {
+	userID, ok := r.Context().Value("userID").(int)
+	if !ok {
+		return ""
+	}
+	return fmt.Sprintf("%d", userID)
+}
 
 func generateSafeFilename(originalName string) string {
 	ext := filepath.Ext(originalName)
@@ -70,12 +76,18 @@ func (s *Server) UploadHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	userID := getUserIDFromContext(r)
+	if userID == "" {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
 	safeName := generateSafeFilename(metadata.Filename)
 	uploadBase := os.Getenv("UPLOAD_DIR")
 	if uploadBase == "" {
 		uploadBase = "./uploads"
 	}
-	userDir := filepath.Join(uploadBase, defaultUserID)
+	userDir := filepath.Join(uploadBase, userID)
 	if err = os.MkdirAll(userDir, 0750); err != nil {
 		http.Error(w, "Failed to prepare upload directory", http.StatusInternalServerError)
 		return
@@ -97,11 +109,12 @@ func (s *Server) UploadHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	documentID, err := db.InsertDocument(r.Context(), s.DB, db.Document{
-		UserID:   defaultUserID,
-		FileName: safeName,
-		FilePath: filePath,
-		Size:     metadata.Size,
-		Status:   "PROCESSING",
+		UserID:       userID,
+		FileName:     safeName,
+		OriginalName: metadata.Filename,
+		FilePath:     filePath,
+		Size:         metadata.Size,
+		Status:       "PROCESSING",
 	})
 
 	if err != nil {

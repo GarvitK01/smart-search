@@ -5,4 +5,6 @@ uploads/
 *.sh
 ml-service/venv/
 ml-service/model/
+web/node_modules/
+web/dist/
 test-commands.txt

@@ -9,21 +9,22 @@ import (
 )
 
 type SearchResult struct {
-	DocumentID int     `json:"document_id"`
-	ChunkIndex int     `json:"chunk_index"`
-	Content    string  `json:"content"`
-	Score      float64 `json:"score"`
+	DocumentID   int     `json:"document_id"`
+	OriginalName string  `json:"original_name"`
+	ChunkIndex   int     `json:"chunk_index"`
+	Content      string  `json:"content"`
+	Score        float64 `json:"score"`
 }
 
 func SemanticSearch(ctx context.Context, db *pgxpool.Pool, embedding []float32, userID string) ([]SearchResult, error) {
 
 	sql := `
-	SELECT c.document_id, c.chunk_index, c.content,
+	SELECT c.document_id, d.original_name, c.chunk_index, c.content,
        1 - (c.embedding <=> $1) AS score
 		FROM chunks c
 		JOIN documents d ON c.document_id = d.id
 		WHERE c.embedding IS NOT NULL AND d.user_id = $2
-		ORDER BY c.embedding <=> $1
+		ORDER BY score DESC
 		LIMIT 3
 	`
 
@@ -39,7 +40,7 @@ func SemanticSearch(ctx context.Context, db *pgxpool.Pool, embedding []float32, 
 
 	for rows.Next() {
 		var res SearchResult
-		err = rows.Scan(&res.DocumentID, &res.ChunkIndex, &res.Content, &res.Score)
+		err = rows.Scan(&res.DocumentID, &res.OriginalName, &res.ChunkIndex, &res.Content, &res.Score)
 		if err != nil {
 			log.Println("Failed to scan chunk:", err)
 			continue
@@ -54,7 +55,7 @@ func SemanticSearch(ctx context.Context, db *pgxpool.Pool, embedding []float32, 
 func KeywordSearch(ctx context.Context, db *pgxpool.Pool, query string, userID string) ([]SearchResult, error) {
 
 	sql := `
-	SELECT c.document_id, c.chunk_index, c.content,
+	SELECT c.document_id, d.original_name, c.chunk_index, c.content,
        ts_rank(to_tsvector('english', c.content), plainto_tsquery('english', $1)) AS score
 		FROM chunks c
 		JOIN documents d ON c.document_id = d.id
@@ -76,7 +77,7 @@ func KeywordSearch(ctx context.Context, db *pgxpool.Pool, query string, userID s
 
 	for rows.Next() {
 		var res SearchResult
-		err = rows.Scan(&res.DocumentID, &res.ChunkIndex, &res.Content, &res.Score)
+		err = rows.Scan(&res.DocumentID, &res.OriginalName, &res.ChunkIndex, &res.Content, &res.Score)
 		if err != nil {
 			log.Println("Failed to scan chunk:", err)
 			continue
